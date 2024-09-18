@@ -39,6 +39,9 @@ from nerfstudio.configs.experiment_config import ExperimentConfig
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes, TrainingCallbackLocation
 from nerfstudio.engine.optimizers import Optimizers
 from nerfstudio.pipelines.base_pipeline import VanillaPipeline
+from nerfstudio.data.datamanagers.parallel_datamanager import ParallelDataManager
+from nerfstudio.data.dataparsers.blender_dataparser import BlenderDataParserConfig
+from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataParserConfig
 from nerfstudio.utils import profiler, writer
 from nerfstudio.utils.decorators import check_eval_enabled, check_main_thread, check_viewer_enabled
 from nerfstudio.utils.misc import step_check
@@ -46,6 +49,9 @@ from nerfstudio.utils.rich_utils import CONSOLE
 from nerfstudio.utils.writer import EventName, TimeWriter
 from nerfstudio.viewer.viewer import Viewer as ViewerState
 from nerfstudio.viewer_legacy.server.viewer_state import ViewerLegacyState
+
+from nerfstudio.utils.io import load_from_json
+import numpy as np
 
 TRAIN_INTERATION_OUTPUT = Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]
 TORCH_DEVICE = str
@@ -88,6 +94,22 @@ class TrainerConfig(ExperimentConfig):
     """Number of steps to accumulate gradients over. Contains a mapping of {param_group:num}"""
     start_paused: bool = False
     """Whether to start the training in a paused state."""
+    iterative_training: bool = False
+    """Whether to train iteratively (add data during training)"""
+    steps_per_iterative_add: Optional[int] = None
+    """Number of steps between adding data."""
+    subset_data: Optional[int] = None
+    """How many images to start training with"""
+    random_seed: Optional[int] = None
+    """Random seed for sampling data from total training set"""
+    max_data: Optional[int] = None
+    """max number of data to add to in training set"""
+    add_amount: Optional[int] = None
+    """how many images to add between each training step"""
+    data_selector: Optional[str] = "random"
+    """if iterative training, method for adding data"""
+    selected_data: Optional[Path] = None
+    """if loading from checkpoint, get the right data"""
 
 
 class Trainer:
@@ -141,6 +163,38 @@ class Trainer:
         self.checkpoint_dir: Path = config.get_checkpoint_dir()
         CONSOLE.log(f"Saving checkpoints to: {self.checkpoint_dir}")
 
+        if isinstance(config.pipeline.datamanager.dataparser, BlenderDataParserConfig) or isinstance(config.pipeline.datamanager.dataparser, NerfstudioDataParserConfig):
+            config.pipeline.datamanager.dataparser.dir_to_save = self.base_dir
+        if self.config.random_seed is not None:
+            config.pipeline.datamanager.dataparser.seed = self.config.random_seed
+            config.pipeline.datamanager.dataparser.data_selector = self.config.data_selector
+
+        assert self.config.data.exists(), f"Data directory {self.config.data} does not exist."
+        if self.config.max_data is not None:
+            self.max_number_frames = self.config.max_data
+        else:
+            if self.config.data.suffix == ".json":
+                meta = load_from_json(self.config.data)
+            else:
+                try:
+                    meta = load_from_json(self.config.data / "transforms.json") # for colmap data
+                except:
+                    pass
+                try:
+                    meta = load_from_json(self.config.data / "transforms_train.json") # for blender
+                except:
+                    pass
+            self.max_number_frames = len(meta["frames"])
+
+        # if iteratively training
+        # specifies [lower limit, how many images to start with, maximum number of images to add]
+        if self.config.iterative_training:
+            if self.config.subset_data is None:
+                self.curr_num_data = self.max_number_frames
+            else:
+                self.curr_num_data = self.config.subset_data
+            self.max_data_to_add = self.max_number_frames
+
         self.viewer_state = None
 
         # used to keep track of the current step
@@ -155,12 +209,14 @@ class Trainer:
                 'test': loads train/test datasets into memory
                 'inference': does not load any dataset into memory
         """
+        self.config.pipeline.datamanager.dataparser.max_data_to_add = self.config.max_data
         self.pipeline = self.config.pipeline.setup(
             device=self.device,
             test_mode=test_mode,
             world_size=self.world_size,
             local_rank=self.local_rank,
             grad_scaler=self.grad_scaler,
+            #TODO: need to pass variable data size here
         )
         self.optimizers = self.setup_optimizers()
 
@@ -305,6 +361,97 @@ class Trainer:
 
                 if step_check(step, self.config.steps_per_save):
                     self.save_checkpoint(step)
+                
+                ### if iteraritely adding data
+                if self.config.iterative_training and ((step+1) % self.config.steps_per_iterative_add) == 0 and self.curr_num_data[1] < self.config.max_data:
+                    json_bb_dir = os.getcwd() + "/data/bounding_boxes/"
+                    if str(self.pipeline.datamanager.dataparser.data).split("/")[-1].__contains__("lego"):
+                        json_file = json_bb_dir + "lego_synthetic.json"
+                    elif str(self.pipeline.datamanager.dataparser.data).split("/")[-1].__contains__("chair"):
+                        json_file = json_bb_dir + "chair_synthetic.json"
+                    elif str(self.pipeline.datamanager.dataparser.data).split("/")[-1].__contains__("materials"):
+                        json_file = json_bb_dir + "materials_synthetic.json"
+                    else:
+                        json_file = json_bb_dir + "lego_synthetic.json"
+                    self.save_checkpoint(step)
+                    #TODO: expose ability from here to specify how much data to add
+                    #TODO: replace "train_until" with proper things.
+                    # currently, train_until[1] = self.curr_num_data
+                    # currently, train_until[2] = self.max_data_to_add
+                    if self.config.add_amount is None:
+                        self.config.add_amount = 6
+                    if self.curr_num_data < self.max_number_frames and self.curr_num_data < self.config.max_data:
+                        self.curr_num_data += self.config.add_amount
+                    if self.config.data_selector.lower().__contains__("fisherrf"):
+                        self.pipeline.model.eval()
+                        self.pipeline._model.eval()
+                        torch.cuda.synchronize()
+                        if self.config.data_selector.lower().__contains__("sample"):                            
+                            curr = np.loadtxt(os.getcwd() + "/" + str(self.base_dir) + "/data/selected.txt", dtype=np.int64)
+                            fisher_opts = fisherRF_Samples(os.getcwd() + "/" + str(self.base_dir) + "/data/fisherRF_scores.txt", num_views=self.config.add_amount)
+                            fisher_opts = np.hstack((curr, fisher_opts), dtype=np.int64)
+                        else:
+                            fisher_opts = fisherRF_Run(self, str(self.base_dir), num_views=self.config.add_amount)
+                        self.pipeline._model.train()
+                        self.pipeline.model.train()
+                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/fisher_opts.txt")
+                        os.makedirs(directory, exist_ok=True)
+                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/fisher_opts.txt", fisher_opts)
+                        self.pipeline.to(self.device)
+                    if self.config.data_selector.lower().__contains__("max_dist"):
+                        self.pipeline.model.eval()
+                        self.pipeline._model.eval()
+                        torch.cuda.synchronize()
+                        erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=1, json_file=json_file, nbv=True)
+                        self.pipeline.model.train()
+                        self.pipeline._model.train()
+                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt")
+                        os.makedirs(directory, exist_ok=True)
+                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt", erg_opts)
+                        self.pipeline.config.datamanager.data = Path(os.getcwd() + "/" + str(self.base_dir) + "/data")
+                    if self.config.data_selector.lower().__contains__("ergodic") or self.config.data_selector.lower().__contains__("entropy"):
+                        self.pipeline.model.eval()
+                        self.pipeline._model.eval()
+                        torch.cuda.synchronize()
+                        if self.config.data_selector.__contains__("nbv"):
+                            erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=True)
+                        else:
+                            erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=False)
+                        self.pipeline.model.train()
+                        self.pipeline._model.train()
+                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt")
+                        os.makedirs(directory, exist_ok=True)
+                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt", erg_opts)
+                        self.pipeline.config.datamanager.data = Path(os.getcwd() + "/" + str(self.base_dir) + "/data")
+                    
+                    torch.cuda.synchronize()
+                    with self.train_lock:
+                        """ adapt iNGP Model to have iterative data adding; feature doesn't exist yet
+                        if type(self.config.pipeline.model) is InstantNGPModelConfig:
+                            self.pipeline.datamanager = VanillaDataManager(
+                                config=self.pipeline.config.datamanager,
+                                device=self.device,
+                                test_mode="val",
+                                world_size=self.world_size,
+                                local_rank=self.local_rank,
+                                until=self.train_until
+                            )
+                        else:"""
+                        self.pipeline.datamanager = ParallelDataManager(
+                            config=self.pipeline.config.datamanager,
+                            device=self.device,
+                            test_mode="val",
+                            world_size=self.world_size,
+                            local_rank=self.local_rank,
+                            #TODO: expose ability to add data
+                            # until=self.train_until
+                        )
+                        self.pipeline.datamanager.to(self.device)
+
+                        self.pipeline._model.num_train_data = len(self.pipeline.datamanager.train_dataset)
+                        self.pipeline._model.kwargs["metadata"] = self.pipeline.datamanager.train_dataset.metadata
+                        
+                    torch.cuda.synchronize()
 
                 writer.write_out_storage()
 

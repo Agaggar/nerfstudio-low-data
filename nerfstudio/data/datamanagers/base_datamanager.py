@@ -383,6 +383,7 @@ class VanillaDataManager(DataManager, Generic[TDataset]):
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
         local_rank: int = 0,
+        #TODO: need to pass variable data size here
         **kwargs,
     ):
         self.config = config
