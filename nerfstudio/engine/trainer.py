@@ -106,8 +106,8 @@ class TrainerConfig(ExperimentConfig):
     """max number of data to add to in training set"""
     add_amount: Optional[int] = None
     """how many images to add between each training step"""
-    data_selector: Optional[str] = "random"
-    """if iterative training, method for adding data"""
+    data_selector: Optional[str] = "uniform"
+    """if iterative training, method for adding data. currently supports uniform and our method"""
     selected_data: Optional[Path] = None
     """if loading from checkpoint, get the right data"""
 
@@ -171,20 +171,19 @@ class Trainer:
 
         assert self.config.data.exists(), f"Data directory {self.config.data} does not exist."
         if self.config.max_data is not None:
-            self.max_number_frames = self.config.max_data
+            self.max_data_to_add = self.config.max_data
+        if self.config.data.suffix == ".json":
+            meta = load_from_json(self.config.data)
         else:
-            if self.config.data.suffix == ".json":
-                meta = load_from_json(self.config.data)
-            else:
-                try:
-                    meta = load_from_json(self.config.data / "transforms.json") # for colmap data
-                except:
-                    pass
-                try:
-                    meta = load_from_json(self.config.data / "transforms_train.json") # for blender
-                except:
-                    pass
-            self.max_number_frames = len(meta["frames"])
+            try:
+                meta = load_from_json(self.config.data / "transforms.json") # for colmap data
+            except:
+                pass
+            try:
+                meta = load_from_json(self.config.data / "transforms_train.json") # for blender
+            except:
+                pass
+        self.max_number_frames = len(meta["frames"])
 
         # if iteratively training
         # specifies [lower limit, how many images to start with, maximum number of images to add]
@@ -193,7 +192,8 @@ class Trainer:
                 self.curr_num_data = self.max_number_frames
             else:
                 self.curr_num_data = self.config.subset_data
-            self.max_data_to_add = self.max_number_frames
+            if self.config.steps_per_iterative_add is None:
+                self.config.steps_per_iterative_add = 200
 
         self.viewer_state = None
 
@@ -216,7 +216,9 @@ class Trainer:
             world_size=self.world_size,
             local_rank=self.local_rank,
             grad_scaler=self.grad_scaler,
-            #TODO: need to pass variable data size here
+            curr_num_data=self.curr_num_data,
+            possible_upper=self.max_number_frames,
+            possible_lower=0
         )
         self.optimizers = self.setup_optimizers()
 
@@ -363,7 +365,7 @@ class Trainer:
                     self.save_checkpoint(step)
                 
                 ### if iteraritely adding data
-                if self.config.iterative_training and ((step+1) % self.config.steps_per_iterative_add) == 0 and self.curr_num_data[1] < self.config.max_data:
+                if self.config.iterative_training and ((step+1) % self.config.steps_per_iterative_add) == 0 and self.curr_num_data < self.config.max_data:
                     json_bb_dir = os.getcwd() + "/data/bounding_boxes/"
                     if str(self.pipeline.datamanager.dataparser.data).split("/")[-1].__contains__("lego"):
                         json_file = json_bb_dir + "lego_synthetic.json"

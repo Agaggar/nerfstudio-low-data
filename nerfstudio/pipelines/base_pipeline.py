@@ -247,12 +247,26 @@ class VanillaPipeline(Pipeline):
         world_size: int = 1,
         local_rank: int = 0,
         grad_scaler: Optional[GradScaler] = None,
+        **kwargs
     ):
         super().__init__()
         self.config = config
         self.test_mode = test_mode
+        if "curr_num_data" in kwargs.keys():
+            self.curr_num_data = kwargs["curr_num_data"]
+        else:
+            self.curr_num_data = None
+        if "possible_lower" in kwargs.keys():
+            self.possible_lower = kwargs["possible_lower"]
+        else:
+            self.possible_lower = None
+        if "possible_upper" in kwargs.keys():
+            self.possible_upper = kwargs["possible_upper"]
+        else:
+            self.possible_upper = None
         self.datamanager: DataManager = config.datamanager.setup(
-            device=device, test_mode=test_mode, world_size=world_size, local_rank=local_rank
+            device=device, test_mode=test_mode, world_size=world_size, local_rank=local_rank,
+            possible_lower=self.possible_lower, curr_num_data=self.curr_num_data, possible_upper=self.possible_upper
         )
         # TODO make cleaner
         seed_pts = None

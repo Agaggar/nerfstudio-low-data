@@ -29,7 +29,7 @@ from nerfstudio.data.dataparsers.base_dataparser import DataParser, DataParserCo
 from nerfstudio.data.scene_box import SceneBox
 from nerfstudio.utils.colors import get_color
 from nerfstudio.utils.io import load_from_json
-
+from nerfstudio.active_selector.data_selector import select_indices
 
 @dataclass
 class BlenderDataParserConfig(DataParserConfig):
@@ -47,6 +47,16 @@ class BlenderDataParserConfig(DataParserConfig):
     ply_path: Optional[Path] = None
     """Path to PLY file to load 3D points from, defined relative to the dataset directory. This is helpful for
     Gaussian splatting and generally unused otherwise. If `None`, points are initialized randomly."""
+    adding_data: str = "False"
+    """whether to save which candidate views are used in training, and which are remaining"""
+    seed: int = 0
+    "seed for random subsetting of data"
+    dir_to_save: Path = Path("outputs")
+    "path of directory where to save training and candidate indices"
+    max_data_to_add: int = 20
+    """total data to add to"""
+    data_selector: str = "uniform"
+    """method for how to add data"""
 
 
 @dataclass
@@ -57,7 +67,7 @@ class Blender(DataParser):
 
     config: BlenderDataParserConfig
 
-    def __init__(self, config: BlenderDataParserConfig):
+    def __init__(self, config: BlenderDataParserConfig, **kwargs):
         super().__init__(config=config)
         self.data: Path = config.data
         self.scale_factor: float = config.scale_factor
@@ -66,11 +76,28 @@ class Blender(DataParser):
             self.alpha_color_tensor = get_color(self.alpha_color)
         else:
             self.alpha_color_tensor = None
+        self.seed = config.seed
+        self.max_data_to_add = config.max_data_to_add
+        self.dir_to_save = str(config.dir_to_save)
 
-    def _generate_dataparser_outputs(self, split="train"):
+    def _generate_dataparser_outputs(self, split="train", **kwargs):
         meta = load_from_json(self.data / f"transforms_{split}.json")
         image_filenames = []
         poses = []
+        if "curr_num_data" in kwargs.keys():
+            self.curr_num_data = kwargs["curr_num_data"]
+        else:
+            self.curr_num_data = None
+        if "possible_lower" in kwargs.keys():
+            self.possible_lower = kwargs["possible_lower"]
+        else:
+            self.possible_lower = None
+        if "possible_upper" in kwargs.keys():
+            self.possible_upper = kwargs["possible_upper"]
+        else:
+            self.possible_upper = None
+        if self.curr_num_data is not None and self.possible_lower is not None and self.possible_upper is not None:
+            input("MAKING PROGRESSSSS")
         for frame in meta["frames"]:
             fname = self.data / Path(frame["file_path"].replace("./", "") + ".png")
             image_filenames.append(fname)

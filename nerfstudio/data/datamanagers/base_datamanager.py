@@ -383,7 +383,6 @@ class VanillaDataManager(DataManager, Generic[TDataset]):
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
         local_rank: int = 0,
-        #TODO: need to pass variable data size here
         **kwargs,
     ):
         self.config = config
@@ -402,7 +401,22 @@ class VanillaDataManager(DataManager, Generic[TDataset]):
         if test_mode == "inference":
             self.dataparser.downscale_factor = 1  # Avoid opening images
         self.includes_time = self.dataparser.includes_time
-        self.train_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split="train")
+        if "curr_num_data" in kwargs.keys():
+            self.curr_num_data = kwargs["curr_num_data"]
+        else:
+            self.curr_num_data = None
+        if "possible_lower" in kwargs.keys():
+            self.possible_lower = kwargs["possible_lower"]
+        else:
+            self.possible_lower = None
+        if "possible_upper" in kwargs.keys():
+            self.possible_upper = kwargs["possible_upper"]
+        else:
+            self.possible_upper = None
+        self.train_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split="train",
+                                                                                                  possible_lower=self.possible_lower, 
+                                                                                                  curr_num_data=self.curr_num_data, 
+                                                                                                  possible_upper=self.possible_upper)
 
         self.train_dataset = self.create_train_dataset()
         self.eval_dataset = self.create_eval_dataset()
@@ -457,7 +471,10 @@ class VanillaDataManager(DataManager, Generic[TDataset]):
     def create_eval_dataset(self) -> TDataset:
         """Sets up the data loaders for evaluation"""
         return self.dataset_type(
-            dataparser_outputs=self.dataparser.get_dataparser_outputs(split=self.test_split),
+            dataparser_outputs=self.dataparser.get_dataparser_outputs(split=self.test_split,
+                                                                      possible_lower=self.possible_lower, 
+                                                                      curr_num_data=self.curr_num_data, 
+                                                                      possible_upper=self.possible_upper),
             scale_factor=self.config.camera_res_scale_factor,
         )
 

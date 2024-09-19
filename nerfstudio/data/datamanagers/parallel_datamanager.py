@@ -160,8 +160,29 @@ class ParallelDataManager(DataManager, Generic[TDataset]):
         if test_mode == "inference":
             self.dataparser.downscale_factor = 1  # Avoid opening images
         self.includes_time = self.dataparser.includes_time
-        self.train_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split="train")
-        self.eval_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split=self.test_split)
+        if "curr_num_data" in kwargs.keys():
+            self.curr_num_data = kwargs["curr_num_data"]
+        else:
+            self.curr_num_data = None
+        if "possible_lower" in kwargs.keys():
+            self.possible_lower = kwargs["possible_lower"]
+        else:
+            self.possible_lower = None
+        if "possible_upper" in kwargs.keys():
+            self.possible_upper = kwargs["possible_upper"]
+        else:
+            self.possible_upper = None
+        print(self.possible_lower, self.possible_upper, self.curr_num_data)
+        input()
+
+        self.train_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split="train",
+                                                                                                  possible_lower=self.possible_lower, 
+                                                                                                  curr_num_data=self.curr_num_data, 
+                                                                                                  possible_upper=self.possible_upper)
+        self.eval_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split=self.test_split,
+                                                                                                  possible_lower=self.possible_lower, 
+                                                                                                  curr_num_data=self.curr_num_data, 
+                                                                                                  possible_upper=self.possible_upper)
         cameras = self.train_dataparser_outputs.cameras
         if len(cameras) > 1:
             for i in range(1, len(cameras)):
