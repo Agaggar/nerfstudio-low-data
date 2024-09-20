@@ -96,9 +96,21 @@ class Blender(DataParser):
             self.possible_upper = kwargs["possible_upper"]
         else:
             self.possible_upper = None
-        if self.curr_num_data is not None and self.possible_lower is not None and self.possible_upper is not None:
-            input("MAKING PROGRESSSSS")
-        for frame in meta["frames"]:
+        if split=="train" and self.curr_num_data is not None and self.possible_lower is not None and self.possible_upper is not None:
+            inds = select_indices(
+                meta, 
+                possible_lower=self.possible_lower, 
+                possible_upper=self.possible_upper,
+                max_size=self.max_data_to_add,
+                size=self.curr_num_data, 
+                seed=self.seed, 
+                training_path=self.dir_to_save, 
+                save_opts = self.config.adding_data,
+                data_method=self.config.data_selector)
+            frames = [meta["frames"][ind] for ind in inds]
+        else:
+            frames = meta["frames"]
+        for frame in frames:
             fname = self.data / Path(frame["file_path"].replace("./", "") + ".png")
             image_filenames.append(fname)
             poses.append(np.array(frame["transform_matrix"]))

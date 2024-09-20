@@ -364,7 +364,7 @@ class Trainer:
                 if step_check(step, self.config.steps_per_save):
                     self.save_checkpoint(step)
                 
-                ### if iteraritely adding data
+                ### if iteratively adding data
                 if self.config.iterative_training and ((step+1) % self.config.steps_per_iterative_add) == 0 and self.curr_num_data < self.config.max_data:
                     json_bb_dir = os.getcwd() + "/data/bounding_boxes/"
                     if str(self.pipeline.datamanager.dataparser.data).split("/")[-1].__contains__("lego"):
@@ -384,41 +384,11 @@ class Trainer:
                         self.config.add_amount = 6
                     if self.curr_num_data < self.max_number_frames and self.curr_num_data < self.config.max_data:
                         self.curr_num_data += self.config.add_amount
-                    if self.config.data_selector.lower().__contains__("fisherrf"):
+                    if self.config.data_selector.lower().__contains__("augment"):
                         self.pipeline.model.eval()
                         self.pipeline._model.eval()
                         torch.cuda.synchronize()
-                        if self.config.data_selector.lower().__contains__("sample"):                            
-                            curr = np.loadtxt(os.getcwd() + "/" + str(self.base_dir) + "/data/selected.txt", dtype=np.int64)
-                            fisher_opts = fisherRF_Samples(os.getcwd() + "/" + str(self.base_dir) + "/data/fisherRF_scores.txt", num_views=self.config.add_amount)
-                            fisher_opts = np.hstack((curr, fisher_opts), dtype=np.int64)
-                        else:
-                            fisher_opts = fisherRF_Run(self, str(self.base_dir), num_views=self.config.add_amount)
-                        self.pipeline._model.train()
-                        self.pipeline.model.train()
-                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/fisher_opts.txt")
-                        os.makedirs(directory, exist_ok=True)
-                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/fisher_opts.txt", fisher_opts)
-                        self.pipeline.to(self.device)
-                    if self.config.data_selector.lower().__contains__("max_dist"):
-                        self.pipeline.model.eval()
-                        self.pipeline._model.eval()
-                        torch.cuda.synchronize()
-                        erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=1, json_file=json_file, nbv=True)
-                        self.pipeline.model.train()
-                        self.pipeline._model.train()
-                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt")
-                        os.makedirs(directory, exist_ok=True)
-                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt", erg_opts)
-                        self.pipeline.config.datamanager.data = Path(os.getcwd() + "/" + str(self.base_dir) + "/data")
-                    if self.config.data_selector.lower().__contains__("ergodic") or self.config.data_selector.lower().__contains__("entropy"):
-                        self.pipeline.model.eval()
-                        self.pipeline._model.eval()
-                        torch.cuda.synchronize()
-                        if self.config.data_selector.__contains__("nbv"):
-                            erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=True)
-                        else:
-                            erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=False)
+                        erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=False)
                         self.pipeline.model.train()
                         self.pipeline._model.train()
                         directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt")
@@ -445,8 +415,9 @@ class Trainer:
                             test_mode="val",
                             world_size=self.world_size,
                             local_rank=self.local_rank,
-                            #TODO: expose ability to add data
-                            # until=self.train_until
+                            curr_num_data=self.curr_num_data,
+                            possible_upper=self.max_number_frames,
+                            possible_lower=0
                         )
                         self.pipeline.datamanager.to(self.device)
 

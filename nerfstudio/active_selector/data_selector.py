@@ -36,6 +36,7 @@ def select_indices(metadata: dict, possible_lower: int, possible_upper: int, max
             raise ValueError(f'Please specify the type of data, i.e. blender if synthetic, or default if real data')
 
     inds = np.array(sorted_images, dtype=int)
+    print("data selector", inds)
     if save_opts:
         # print("saving")
         if possible_upper > 100:

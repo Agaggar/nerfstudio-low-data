@@ -172,9 +172,7 @@ class ParallelDataManager(DataManager, Generic[TDataset]):
             self.possible_upper = kwargs["possible_upper"]
         else:
             self.possible_upper = None
-        print(self.possible_lower, self.possible_upper, self.curr_num_data)
-        input()
-
+        # print(self.possible_lower, self.possible_upper, self.curr_num_data)
         self.train_dataparser_outputs: DataparserOutputs = self.dataparser.get_dataparser_outputs(split="train",
                                                                                                   possible_lower=self.possible_lower, 
                                                                                                   curr_num_data=self.curr_num_data, 
@@ -184,6 +182,7 @@ class ParallelDataManager(DataManager, Generic[TDataset]):
                                                                                                   curr_num_data=self.curr_num_data, 
                                                                                                   possible_upper=self.possible_upper)
         cameras = self.train_dataparser_outputs.cameras
+        print("par daramanager total", len(cameras))
         if len(cameras) > 1:
             for i in range(1, len(cameras)):
                 if cameras[0].width != cameras[i].width or cameras[0].height != cameras[i].height:
