@@ -64,6 +64,7 @@ from nerfstudio.models.vanilla_nerf import NeRFModel, VanillaModelConfig
 from nerfstudio.pipelines.base_pipeline import VanillaPipelineConfig
 from nerfstudio.pipelines.dynamic_batch import DynamicBatchPipelineConfig
 from nerfstudio.plugins.registry import discover_methods
+from nerfstudio.models.low_data_nerfacto import NerfactoActiveModel
 
 method_configs: Dict[str, Union[TrainerConfig, ExternalMethodDummyTrainerConfig]] = {}
 descriptions = {
@@ -83,6 +84,7 @@ descriptions = {
     "neus-facto": "Implementation of NeuS-Facto. (slow)",
     "splatfacto": "Gaussian Splatting model",
     "splatfacto-big": "Larger version of Splatfacto with higher quality.",
+    "nerfacto-active": "Can actively add data into the training set"
 }
 
 method_configs["nerfacto"] = TrainerConfig(
@@ -706,6 +708,58 @@ method_configs["splatfacto-big"] = TrainerConfig(
     },
     viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
     vis="viewer",
+)
+
+method_configs["nerfacto-active"] = TrainerConfig(
+    method_name="nerfacto",
+    steps_per_eval_batch=500,
+    steps_per_save=5000,
+    max_num_iterations=10000,
+    mixed_precision=True,
+    pipeline=VanillaPipelineConfig(
+        datamanager=ParallelDataManagerConfig(
+            dataparser=BlenderDataParserConfig(
+                scale_factor=1.0,
+                adding_data=True
+            ),
+            train_num_rays_per_batch=4096,
+            eval_num_rays_per_batch=4096,
+        ),
+        model=NerfactoModelConfig(
+            _target=NerfactoActiveModel,
+            eval_num_rays_per_chunk=1 << 15,
+            camera_optimizer=CameraOptimizerConfig(mode="off"),
+            average_init_density=0.01,
+            implementation="tcnn"
+        ),
+    ),
+    optimizers={
+        "proposal_networks": {
+            "optimizer": AdamOptimizerConfig(lr=1e-2, eps=1e-15),
+            "scheduler": ExponentialDecaySchedulerConfig(lr_final=0.0001, max_steps=200000),
+        },
+        "fields": {
+            "optimizer": AdamOptimizerConfig(lr=1e-2, eps=1e-15), ## LEGO
+            # "optimizer": AdamOptimizerConfig(lr=2e-3, eps=1e-15), ## CHAIR
+            "scheduler": ExponentialDecaySchedulerConfig(lr_final=0.0001, max_steps=200000),
+        },
+        "camera_opt": {
+            "optimizer": AdamOptimizerConfig(lr=1e-3, eps=1e-15),
+            "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-4, max_steps=5000),
+        },
+    },
+    viewer=ViewerConfig(
+        num_rays_per_chunk=1 << 15,
+        quit_on_train_completion=True),
+    vis="viewer+tensorboard",
+    iterative_training=True,
+    steps_per_eval_all_images=9999,
+    steps_per_iterative_add=200,
+    subset_data=6,
+    max_data=12,
+    add_amount=6,
+    project_name="synthetic_lego"
+    # make sure to specify --random_seed, --data_selector
 )
 
 
