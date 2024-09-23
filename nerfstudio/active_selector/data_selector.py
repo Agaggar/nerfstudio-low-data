@@ -15,7 +15,11 @@ def select_indices(metadata: dict, possible_lower: int, possible_upper: int, max
     elif data_method.lower().__contains__("nbb"):
         print("actively adding data using our method - nbb")
         # initial batch of data is currently fixed at 100, 102, 104, 106, 108, 110
-        curr = rng.choice(np.arange(possible_lower, possible_upper), size=max_size, replace=False) #, p=probs)
+        # curr = rng.choice(np.arange(possible_lower, possible_upper), size=max_size, replace=False) #, p=probs)
+        try:
+            curr = np.loadtxt(os.getcwd() + "/" + training_path + "/data/selected.txt", dtype=int)
+        except:
+            curr = rng.choice(np.arange(possible_lower, possible_upper), size=max_size, replace=False) #, p=probs)
         # curr = np.arange(100, 112)[::2][:size]
         # assumes added data will start at index 116
         options = np.arange(116, 140)

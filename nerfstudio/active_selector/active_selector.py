@@ -237,8 +237,8 @@ class ActiveSelector():
         return all_samp, counts.astype(np.int64), weights
 
     def nbv_resampled(self, pipeline, num_views, curr_so3=None):
-        pose_unc = self.uncertainty_by_pose_calc(pipeline)
-        np.savetxt("points.txt", pose_unc)
+        # pose_unc = self.uncertainty_by_pose_calc(pipeline)
+        # np.savetxt("points.txt", pose_unc)
         pose_unc = np.loadtxt("points.txt")
         unc = pose_unc[:, -1]
         # weights = unc**3
@@ -284,7 +284,7 @@ def run(trainer, load_config_dir, num_views=1, json_file=None, nbv=False):
     #TODO: change to your blender path
     blender_path = "/home/ayush/Downloads/blender-4.1.1-linux-x64/blender"
     object_file = "lego.blend"
-    command = "cd /data/blend_files && " + blender_path + "-b " + object_file + " --python 360_view.py {0} {1} -- --cycles-device CUDA".format(os.path.abspath(load_config_dir) + "/data/images", load_config_dir + "/data/transforms_train.json")
+    command = "cd " + os.getcwd() + "/data/blend_files && " + blender_path + " -b " + object_file + " --python 360_view.py {0} {1} -- --cycles-device CUDA".format(os.path.abspath(load_config_dir) + "/data/images", load_config_dir + "/data/transforms_train.json")
 
     curr_cams = np.loadtxt(str(trainer.config.get_base_dir()) + "/data/selected.txt").astype(np.int64)
     data_json = str(trainer.config.pipeline.datamanager.dataparser.data) +  "/transforms_train.json"
@@ -330,6 +330,7 @@ def run(trainer, load_config_dir, num_views=1, json_file=None, nbv=False):
     adding_index = np.arange(start_index, start_index+num_views)
     new_fp = os.path.abspath(load_config_dir) + "/data/images/transforms.json"
     sp.call(command, shell=True)
+    print("generated new images (:")
 
     trainer.pipeline.model.output_preds = False
     # return np.concatenate((curr_cams, np.asarray(np.loadtxt(load_config_dir + "/data/candidates.txt").astype(np.int64)[adding_index]).flatten()))
