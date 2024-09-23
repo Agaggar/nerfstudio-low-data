@@ -8,27 +8,20 @@ import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 import json
-from scipy.spatial.transform import Rotation as R
 import yaml
 from dataclasses import dataclass
 
 from nerfstudio.model_components.renderers import background_color_override_context
 from nerfstudio.data.scene_box import OrientedBox
 from nerfstudio.viewer_legacy.server.utils import three_js_perspective_camera_focal_length
-from nerfstudio.cameras.cameras import Cameras, CameraType, RayBundle
+from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.utils.io import load_from_json
 
-from sklearn.mixture import GaussianMixture
-
 import argparse
-from nerfstudio.active_selector.idx_to_cam import idx_to_cam
-from nerfstudio.active_selector.closest_camera import find_closest_cam
-from nerfstudio.active_selector.kes_so3.hemisphere import uniform_hemi_angles, vector_to_quaternion, generate_hemi_angles, spherical_to_hemi, calculate_normal_vectors, rpy_to_spherical
-from nerfstudio.active_selector.kes_so3.ilqr_kes import Agent, Distr
+from nerfstudio.active_selector.kes_so3.hemisphere import spherical_to_hemi
+from nerfstudio.active_selector.kes_so3.lie_agent import Agent
 from nerfstudio.active_selector.kes_so3.so3_cost import quadratic_cost
-from nerfstudio.active_selector.kes_so3.optimize_params import KernelObjective
 import subprocess as sp
-import time
 
 @dataclass
 class CropData:
@@ -221,9 +214,9 @@ class ActiveSelector():
                 if w > resampling_criteria * nu:
                     alr_in = False
                     for s in all_samp:
-                        if np.all(s == xbar[index, :]): # or np.abs(s[2] - xbar[index, 2]) < 0.1:
+                        # if np.all(s == xbar[index, :]): # or np.abs(s[2] - xbar[index, 2]) < 0.1:
                         # if np.all(s == xbar[index, :]) or xbar[index, 0] > 0.75:
-                        # if np.all(s == xbar[index, :]) or xbar[index, 0] < 0.4:
+                        if np.all(s == xbar[index, :]) or xbar[index, 0] < 0.4:
                             alr_in = True
                             print("alr in")
                             break
