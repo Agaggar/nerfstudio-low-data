@@ -291,9 +291,10 @@ class Cameras(TensorDataclass):
         return h_jagged or w_jagged
 
     def get_image_coords(
-        self, pixel_offset: float = 0.5, index: Optional[Tuple] = None
+        self, pixel_offset: float = 0.5, index: Optional[Tuple] = None, middle: Optional[int] = None
     ) -> Float[Tensor, "height width 2"]:
         """This gets the image coordinates of one of the cameras in this object.
+        If middle is not None, it gets the center pixels.
 
         If no index is specified, it will return the maximum possible sized height / width image coordinate map,
         by looking at the maximum height and width of all the cameras in this object.
@@ -314,8 +315,11 @@ class Cameras(TensorDataclass):
         else:
             image_height = self.image_height[index].item()
             image_width = self.image_width[index].item()
+        if middle is None:
             image_coords = torch.meshgrid(torch.arange(image_height), torch.arange(image_width), indexing="ij")
-            image_coords = torch.stack(image_coords, dim=-1) + pixel_offset  # stored as (y, x) coordinates
+        else:
+            image_coords = torch.meshgrid(torch.arange(int(image_height/2-middle), int(image_height/2+middle)), torch.arange(int(image_width/2-middle), int(image_width/2+middle)), indexing="ij")
+        image_coords = torch.stack(image_coords, dim=-1) + pixel_offset  # stored as (y, x) coordinates
         return image_coords
 
     def generate_rays(
@@ -328,8 +332,10 @@ class Cameras(TensorDataclass):
         disable_distortion: bool = False,
         aabb_box: Optional[SceneBox] = None,
         obb_box: Optional[OrientedBox] = None,
+        middle: Optional[Int] = None
     ) -> RayBundle:
         """Generates rays for the given camera indices.
+        Middle takes the center middle x middle pixels
 
         This function will standardize the input arguments and then call the _generate_rays_from_coords function
         to generate the rays. Our goal is to parse the arguments and then get them into the right shape:
@@ -438,7 +444,7 @@ class Cameras(TensorDataclass):
         if coords is None:
             index_dim = camera_indices.shape[-1]
             index = camera_indices.reshape(-1, index_dim)[0]
-            coords = cameras.get_image_coords(index=tuple(index))  # (h, w, 2)
+            coords = cameras.get_image_coords(index=tuple(index), middle=middle)  # (h, w, 2)
             coords = coords.reshape(coords.shape[:2] + (1,) * len(camera_indices.shape[:-1]) + (2,))  # (h, w, 1..., 2)
             coords = coords.expand(coords.shape[:2] + camera_indices.shape[:-1] + (2,))  # (h, w, num_rays, 2)
             camera_opt_to_camera = (  # (h, w, num_rays, 3, 4) or None

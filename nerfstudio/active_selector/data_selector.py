@@ -12,15 +12,16 @@ def select_indices(metadata: dict, possible_lower: int, possible_upper: int, max
         curr = np.arange(100, 112)[::2]
         options = np.concatenate((curr, options))[:size]
         # options = options[:size]
-    elif data_method.lower().__contains__("ours"):
-        print("actively adding data using our method")
+    elif data_method.lower().__contains__("nbb"):
+        print("actively adding data using our method - nbb")
         # initial batch of data is currently fixed at 100, 102, 104, 106, 108, 110
-        curr = np.arange(100, 112)[::2][:size]
+        curr = rng.choice(np.arange(possible_lower, possible_upper), size=max_size, replace=False) #, p=probs)
+        # curr = np.arange(100, 112)[::2][:size]
         # assumes added data will start at index 116
         options = np.arange(116, 140)
         options = np.concatenate((curr, options))[:size]
     else:
-        raise ValueError(f'{data_method} is not a valid way to add data. Options are: uniform, random, FisherRF, ergodic, nbv')
+        raise ValueError(f'{data_method} is not a valid way to add data. Options are: uniform and nbb')
 
     sorted_images = np.zeros(len(options))
     for i, x in enumerate(np.array(metadata["frames"])[options]):

@@ -187,7 +187,9 @@ camera_paths/
 ._.DS_Store
 */**/.DS_Store
 */**/._.DS_Store
+points.txt
 
 # pixi environments
 .pixi
 /third_party
+

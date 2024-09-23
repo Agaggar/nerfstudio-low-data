@@ -52,6 +52,7 @@ from nerfstudio.viewer_legacy.server.viewer_state import ViewerLegacyState
 
 from nerfstudio.utils.io import load_from_json
 import numpy as np
+from nerfstudio.active_selector.active_selector import run as augment_nbb
 
 TRAIN_INTERATION_OUTPUT = Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]
 TORCH_DEVICE = str
@@ -107,7 +108,7 @@ class TrainerConfig(ExperimentConfig):
     add_amount: Optional[int] = None
     """how many images to add between each training step"""
     data_selector: Optional[str] = "uniform"
-    """if iterative training, method for adding data. currently supports uniform and our method"""
+    """if iterative training, method for adding data. currently supports uniform and nbb"""
     selected_data: Optional[Path] = None
     """if loading from checkpoint, get the right data"""
 
@@ -376,24 +377,21 @@ class Trainer:
                     else:
                         json_file = json_bb_dir + "lego_synthetic.json"
                     self.save_checkpoint(step)
-                    #TODO: expose ability from here to specify how much data to add
-                    #TODO: replace "train_until" with proper things.
-                    # currently, train_until[1] = self.curr_num_data
-                    # currently, train_until[2] = self.max_data_to_add
                     if self.config.add_amount is None:
+                        # default active add is 6 images
                         self.config.add_amount = 6
                     if self.curr_num_data < self.max_number_frames and self.curr_num_data < self.config.max_data:
                         self.curr_num_data += self.config.add_amount
-                    if self.config.data_selector.lower().__contains__("augment"):
+                    if self.config.data_selector.lower().__contains__("nbb"):
                         self.pipeline.model.eval()
                         self.pipeline._model.eval()
                         torch.cuda.synchronize()
-                        erg_opts = ergodic_Run(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=False)
+                        active_opts = augment_nbb(self, load_config_dir=str(self.base_dir), num_views=self.config.add_amount, json_file=json_file, nbv=False)
                         self.pipeline.model.train()
                         self.pipeline._model.train()
-                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt")
+                        directory = os.path.dirname(os.getcwd() + "/" + str(self.base_dir) + "/data/active_opts.txt")
                         os.makedirs(directory, exist_ok=True)
-                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/erg_opts.txt", erg_opts)
+                        np.savetxt(os.getcwd() + "/" + str(self.base_dir) + "/data/active_opts.txt", active_opts)
                         self.pipeline.config.datamanager.data = Path(os.getcwd() + "/" + str(self.base_dir) + "/data")
                     
                     torch.cuda.synchronize()
