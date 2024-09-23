@@ -13,17 +13,22 @@ pip install -e .
 ```
 
 ### Data
-You'll also need some data to train your NeRF model with. 
+You'll also need some data to train your NeRF model with. We provide sample files (from the lego dozer, scaled down 0.1x) in data/lego_scale
 
 The easiest way to get sample data is to download the [Blender dataset](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1) from the original NeRF paper (nerf_synthetic.zip). You can then follow the Nerfstudio guide to training with Blender data [here](https://docs.nerf.studio/quickstart/existing_dataset.html).
 
 Alternatively, you can record a video in real life and use COLMAP to label poses with images (following [this guide](https://github.com/NVlabs/instant-ngp/blob/master/docs/nerf_dataset_tips.md#colmap) by Nvidia's amazing instant NGP team).
 
 ### Blender
-If you want to augment additional images in Blender, download [Blender software](https://www.blender.org/); we run Blender v4.1.1 on Linux. The blend files we use are located `data/blende_files`, and are scaled down by 0.1x.
+If you want to augment additional images in Blender, download [Blender software](https://www.blender.org/); we run Blender v4.1.1 on Linux. The blend files we use are located `data/blender_files`, and are scaled down by 0.1x.
 
 # Using our code
 Running `ns-train nerfacto-active --data PATH_TO_DATA --random-seed POSITIVE_INTEGER` sets the default configuration for active, iterative training.
+
+For example:
+```python
+ns-train nerfacto-active --data data/lego_scale --random-seed 0 --subset-data 10 --max-data 15 --add-amount 5 --data-selector nbb
+```
 
 Additional flags:
 - `--iterative_training: bool = False`: Whether to train iteratively (add data during training)
