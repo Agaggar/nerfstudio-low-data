@@ -21,7 +21,6 @@ from typing import Dict, Literal, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-import torchbnn as bnn
 
 from nerfstudio.cameras.rays import RaySamples
 from nerfstudio.data.scene_box import SceneBox

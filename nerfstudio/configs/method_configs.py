@@ -720,7 +720,7 @@ method_configs["nerfacto-active"] = TrainerConfig(
         datamanager=ParallelDataManagerConfig(
             dataparser=BlenderDataParserConfig(
                 scale_factor=1.0,
-                adding_data=True
+                adding_data="True"
             ),
             train_num_rays_per_batch=4096,
             eval_num_rays_per_batch=4096,
